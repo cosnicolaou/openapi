@@ -1,0 +1,26 @@
+openapi: 3.0.1
+components:
+  schemas:
+    API:
+      properties:
+        readonlyEg:
+          type: object
+          allOf:
+            - type: object
+            - readOnly: true
+    Base:
+      properties:
+        apiURL:
+          type: string
+          format: uri
+          example: http://example
+        another:
+          type: string
+          example: some text
+    MergeEg:
+      allOf:
+        - $ref: "#/components/schemas/Base"
+        - properties:
+            apiURL:
+              example: http://a-different-example
+              type: string

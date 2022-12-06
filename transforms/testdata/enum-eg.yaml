@@ -1,0 +1,14 @@
+openapi: 3.0.1
+components:
+  schemas:
+    schema:
+      type: object
+      properties:
+        type:
+          enum:
+            - date
+          example: date
+          type: string
+        value:
+          format: date
+          type: string
