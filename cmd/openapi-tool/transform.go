@@ -35,10 +35,7 @@ func transformCmd(ctx context.Context, values any, args []string) error {
 		})
 	}
 
-	err = applyTransformations(ctx, cfg, func(ctx context.Context, t transforms.T, node yaml.Node) error {
-		return t.Configure(node)
-	})
-	if err != nil {
+	if err := cfg.ConfigureAll(); err != nil {
 		return err
 	}
 
@@ -56,7 +53,7 @@ func transformCmd(ctx context.Context, values any, args []string) error {
 		return err
 	}
 	err = applyTransformations(ctx, cfg, func(ctx context.Context, t transforms.T, node yaml.Node) (err error) {
-		doc, err = t.TransformV3(doc)
+		doc, err = t.Transform(doc)
 		return
 	})
 	if err != nil {
@@ -68,12 +65,12 @@ func transformCmd(ctx context.Context, values any, args []string) error {
 type applyFunc func(ctx context.Context, t transforms.T, node yaml.Node) error
 
 func applyTransformations(ctx context.Context, cfg transforms.Config, fn applyFunc) error {
-	for i, n := range cfg.Names {
+	for i, n := range cfg.Transforms {
 		t := transforms.Get(n)
 		if t == nil {
 			return fmt.Errorf("transform %v is not installed: must be one of: %v", n, strings.Join(transforms.List(), ", "))
 		}
-		node := cfg.Transforms[i]
+		node := cfg.Configs[i]
 		if err := fn(ctx, t, node); err != nil {
 			return err
 		}

@@ -5,24 +5,15 @@
 package transforms
 
 import (
-	"errors"
-
-	"github.com/getkin/kin-openapi/openapi2"
 	"github.com/getkin/kin-openapi/openapi3"
 	"gopkg.in/yaml.v3"
-)
-
-var (
-	ErrTransformNotImplementedForV2 = errors.New("transform not implemented for v2 schemas")
-	ErrTransformNotImplementedForV3 = errors.New("transform not implemented for v3 schemas")
 )
 
 type T interface {
 	Name() string
 	Describe(node yaml.Node) string
 	Configure(node yaml.Node) error
-	TransformV2(*openapi2.T) (*openapi2.T, error)
-	TransformV3(*openapi3.T) (*openapi3.T, error)
+	Transform(*openapi3.T) (*openapi3.T, error)
 }
 
 var installed = map[string]T{}

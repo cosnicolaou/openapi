@@ -9,11 +9,13 @@ import (
 )
 
 type Walker interface {
-	Walk(doc *openapi3.T)
+	Walk(doc *openapi3.T) error
 }
 
 type walkerOptions struct {
-	followRefs bool
+	followRefs  bool
+	visitPrefix []string
+	applyPrefix bool
 }
 
 type WalkerOption func(o *walkerOptions)
@@ -24,11 +26,21 @@ func WalkerFollowRefs(v bool) WalkerOption {
 	}
 }
 
-type Visitor func(path []string, parent, node any) bool
+func WalkerVisitPrefix(path ...string) WalkerOption {
+	return func(o *walkerOptions) {
+		o.visitPrefix = path
+		o.applyPrefix = true
+	}
+}
+
+// Visitor is called for every node in the walk. It returns true for the
+// walk to continue, false otherwise. The walk will stop when an error is
+// returned.
+type Visitor func(path []string, parent, node any) (ok bool, err error)
 
 // NewWalker returns a Walker that will visit every node in an openapi3 document.
 func NewWalker(v Visitor, opts ...WalkerOption) Walker {
-	w := &nodeWalker{visit: v}
+	w := &nodeWalker{visitor: v}
 	for _, opt := range opts {
 		opt(&w.opts)
 	}
@@ -36,22 +48,45 @@ func NewWalker(v Visitor, opts ...WalkerOption) Walker {
 }
 
 type nodeWalker struct {
-	opts  walkerOptions
-	visit Visitor
+	opts    walkerOptions
+	visitor Visitor
 }
 
-func (wn nodeWalker) Walk(doc *openapi3.T) {
-	wn.components([]string{"components"}, doc, doc.Components)
+// returns true if b is a prefix of a
+func prefixMatch(a, b []string) bool {
+	if len(b) > len(a) {
+		return false
+	}
+	for i := range b {
+		if a[i] != b[i] {
+			return false
+		}
+	}
+	return true
+}
+
+func (wn nodeWalker) visit(path []string, parent, node any) (ok bool, err error) {
+	if wn.opts.applyPrefix {
+		if !prefixMatch(path, wn.opts.visitPrefix) {
+			return true, nil
+		}
+	}
+	return wn.visitor(path, parent, node)
+}
+
+func (wn nodeWalker) Walk(doc *openapi3.T) error {
+	_, err := wn.components([]string{"components"}, doc, doc.Components)
 	// info
 	// paths
 	// SecurityRequirements
 	// servers
 	// tags
 	// externaldocs
+	return err
 }
 
-func (wn nodeWalker) components(path []string, parent any, c openapi3.Components) {
-	if !wn.visit(path, parent, c) {
+func (wn nodeWalker) components(path []string, parent any, c openapi3.Components) (ok bool, err error) {
+	if ok, err = wn.visit(path, parent, c); !ok || err != nil {
 		return
 	}
 	wn.schemas(append(path, "schemas"), parent, c.Schemas)
@@ -63,25 +98,32 @@ func (wn nodeWalker) components(path []string, parent any, c openapi3.Components
 	// examples
 	// links
 	// callbacks
+	return false, nil
 }
 
-func (wn nodeWalker) schemas(path []string, parent any, schemas openapi3.Schemas) {
+func (wn nodeWalker) schemas(path []string, parent any, schemas openapi3.Schemas) (ok bool, err error) {
 	for name, schema := range schemas {
-		wn.schemaRef(append(path, name), parent, schema)
+		if ok, err = wn.schemaRef(append(path, name), parent, schema); !ok || err != nil {
+			return
+		}
 	}
+	return
 }
 
-func (wn nodeWalker) schemaRefs(path []string, parent any, srefs openapi3.SchemaRefs) {
+func (wn nodeWalker) schemaRefs(path []string, parent any, srefs openapi3.SchemaRefs) (ok bool, err error) {
 	for _, sref := range srefs {
-		wn.schemaRef(path, parent, sref)
+		if ok, err = wn.schemaRef(path, parent, sref); !ok || err != nil {
+			return ok, err
+		}
 	}
+	return
 }
 
-func (wn nodeWalker) schemaRef(path []string, parent any, sref *openapi3.SchemaRef) {
+func (wn nodeWalker) schemaRef(path []string, parent any, sref *openapi3.SchemaRef) (ok bool, err error) {
 	if sref == nil {
 		return
 	}
-	if !wn.visit(path, parent, sref) {
+	if ok, err = wn.visit(path, parent, sref); !ok || err != nil {
 		return
 	}
 	if !wn.opts.followRefs && len(sref.Ref) > 0 {
@@ -96,29 +138,36 @@ func (wn nodeWalker) schemaRef(path []string, parent any, sref *openapi3.SchemaR
 	wn.schemaRef(append(path, "additionalProperties"), sref, sref.Value.AdditionalProperties)
 	wn.extensions(append(path, "extensions"), sref, sref.Value.Extensions)
 	wn.discriminator(append(path, "discriminator"), sref, sref.Value.Discriminator)
+	return true, nil
 }
 
-func (wn nodeWalker) extensions(path []string, parent any, exts map[string]interface{}) {
-	if !wn.visit(path, parent, exts) {
+func (wn nodeWalker) extensions(path []string, parent any, exts map[string]interface{}) (ok bool, err error) {
+	if ok, err = wn.visit(path, parent, exts); !ok || err != nil {
 		return
 	}
 	for name, ext := range exts {
-		wn.visit(append(path, name), parent, ext)
+		if ok, err = wn.visit(append(path, name), parent, ext); !ok || err != nil {
+			return
+		}
 	}
+	return
 }
 
-func (wn nodeWalker) discriminator(path []string, parent any, disc *openapi3.Discriminator) {
+func (wn nodeWalker) discriminator(path []string, parent any, disc *openapi3.Discriminator) (ok bool, err error) {
 	if disc == nil {
 		return
 	}
-	if !wn.visit(path, parent, disc) {
+	if ok, err = wn.visit(path, parent, disc); !ok || err != nil {
 		return
 	}
-	if !wn.visit(append(path, "mapping"), parent, disc.Mapping) {
+	if ok, err = wn.visit(append(path, "mapping"), parent, disc.Mapping); !ok || err != nil {
 		return
 	}
 	wn.extensions(path, parent, disc.Extensions)
 	for name, mapping := range disc.Mapping {
-		wn.visit(append(path, "mapping", name), parent, mapping)
+		if ok, err = wn.visit(append(path, "mapping", name), parent, mapping); !ok || err != nil {
+			return
+		}
 	}
+	return true, nil
 }

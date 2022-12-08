@@ -5,155 +5,159 @@
 package transforms
 
 import (
+	"fmt"
 	"strings"
 
 	"cloudeng.io/text/linewrap"
 	"github.com/cosnicolaou/openapi"
-	"github.com/getkin/kin-openapi/openapi2"
 	"github.com/getkin/kin-openapi/openapi3"
 	"gopkg.in/yaml.v3"
 )
 
 func init() {
-	Register(&fixAllOf{})
+	Register(&allOfTransformer{})
 }
 
-type readOnly struct {
-	Path []string
+type allOf struct {
+	Path           []string `yaml:",flow"`
+	IgnoreNonType  bool     `yaml:"ignoreNonType"`
+	PromoteNonType []string `yaml:"promoteNonType,flow"`
+	MergeNonType   []string `yaml:"mergeNonType,flow"`
 }
 
-type merge struct {
+type allOfTransformer struct {
+	AllOfRules []allOf `yaml:"allOf"`
 }
 
-type fixAllOf struct {
-	IgnoreReadOnly  []string `yaml:"ignoreReadOnly"`
-	PromoteReadOnly []string `yaml:"promoteReadOnly"`
-	MergeProperties []string `yaml:"mergeProperties"`
-}
-
-func (t *fixAllOf) Name() string {
+func (t *allOfTransformer) Name() string {
 	return "allOf"
 }
 
-func (t *fixAllOf) Configure(node yaml.Node) error {
-	return node.Decode(t)
+func (t *allOfTransformer) Configure(node yaml.Node) error {
+	var ao []allOf
+	if err := node.Decode(&ao); err != nil {
+		return err
+	}
+	t.AllOfRules = ao
+	return nil
 }
 
-func (t *fixAllOf) Describe(node yaml.Node) string {
+func (t *allOfTransformer) Describe(node yaml.Node) string {
 	out := &strings.Builder{}
 	out.WriteString(linewrap.Block(0, 80, `
-The allOf transform handles the case where an allOff list is incorrectly specified with a -properties, -required, -description block that is intended to be merged with the preceeding allOf item. For example:
-`))
-
-	out.WriteString(`
-  allOff:
-    - $ref: "#/components/schemas/something"
-    - properties:
-      url:
-        example: http://example
-        type string
-
-  allOff:
-    - $ref: "#/components/schemas/something"
-    - required:
-      - type-in-something
-`)
-	tmp := &fixAllOf{}
+The allOf transform handles cases where the allOf array members are incorrectly
+specified. In particular it currently allows for ignoring, promoting or merging
+allOf entries that are not themselves schemas with type information.`))
+	tmp := &allOfTransformer{}
 	node.Decode(tmp)
 	out.WriteString("\noptions:\n")
 	out.WriteString(formatYAML(2, tmp))
 	return out.String()
 }
 
-func (t *fixAllOf) TransformV2(doc *openapi2.T) (*openapi2.T, error) {
-	return nil, ErrTransformNotImplementedForV2
+func (t *allOfTransformer) Transform(doc *openapi3.T) (*openapi3.T, error) {
+	walker := openapi.NewWalker(t.visitor)
+	return doc, walker.Walk(doc)
+}
+
+func hasSchema(s *openapi3.SchemaRef) bool {
+	if len(s.Ref) > 0 {
+		return true
+	}
+	v := s.Value
+	if len(v.Type) > 0 || len(v.AllOf) > 0 || len(v.OneOf) > 0 || len(v.AnyOf) > 0 || len(v.Enum) > 0 {
+		return true
+	}
+	for _, p := range v.Properties {
+		if hasSchema(p) {
+			return true
+		}
+	}
+	return false
+}
+
+func containsNonType(srefs openapi3.SchemaRefs) bool {
+	for _, sr := range srefs {
+		if !hasSchema(sr) {
+			return true
+		}
+	}
+	return false
 }
 
 func mergeProperties(base, overlay map[string]*openapi3.SchemaRef) {
 	for k, v := range overlay {
 		base[k] = v
+		fmt.Printf("m %v %v\n", k, v)
 	}
 }
 
-func (t *fixAllOf) mergeProperties(parent string, schema *openapi3.SchemaRef) {
-	for _, tm := range t.MergeProperties {
-		if parent == tm {
-			var prev *openapi3.SchemaRef
-			na := []*openapi3.SchemaRef{}
-			for _, s := range schema.Value.AllOf {
-				if len(s.Value.Type) != 0 {
-					na = append(na, s)
-					prev = s
-					continue
-				}
-				if prev != nil {
-					mergeProperties(prev.Value.Properties, s.Value.Properties)
-					// Remove any use of $ref to allow the merged properties
-					// to be appear directly in the spec.
-					prev.Ref = ""
-				}
-			}
-			schema.Value.AllOf = na
+func handleMerge(a, b any, fields []string) (any, error) {
+	am, bm := jsonMap(a), jsonMap(b)
+	for _, field := range fields {
+		if v, ok := bm[field]; ok {
+			am[field] = v
+			fmt.Printf("M: %v\n", field)
 		}
 	}
+	c := a
+	err := marshalMap(am, c)
+	return c, err
 }
 
-func (t *fixAllOf) handleReadOnly(readonly []string, parent string, schema *openapi3.SchemaRef, promote bool) {
-	for _, ro := range readonly {
-		if parent == ro {
-			na := []*openapi3.SchemaRef{}
-			for _, s := range schema.Value.AllOf {
-				if len(s.Value.Type) == 0 && s.Value.ReadOnly {
-					if promote {
-						schema.Value.ReadOnly = s.Value.ReadOnly
-						schema.Value.Description = s.Value.Description
-						schema.Value.Example = s.Value.Example
-					}
-					continue
-				}
-				na = append(na, s)
+func (t *allOfTransformer) handleTransformation(r allOf, schema *openapi3.SchemaRef) error {
+	na := []*openapi3.SchemaRef{}
+	var prev *openapi3.SchemaRef
+	for i, s := range schema.Value.AllOf {
+		if hasSchema(s) {
+			prev = s
+			na = append(na, s)
+			continue
+		}
+		switch {
+		case r.IgnoreNonType:
+			continue
+		case len(r.MergeNonType) > 0:
+			fmt.Printf("merging....\n")
+
+			if prev == nil {
+				return fmt.Errorf("allOf entry: %v cannot be merged since there is previous schema with a type to merge it with", i)
 			}
-			schema.Value.AllOf = na
+			n, err := handleMerge(prev.Value, s.Value, r.MergeNonType)
+			if err != nil {
+				return err
+			}
+			prev.Value = n.(*openapi3.Schema)
+		case len(r.PromoteNonType) > 0:
+			n, err := handleMerge(schema.Value, s.Value, r.PromoteNonType)
+			if err != nil {
+				return err
+			}
+			schema.Value = n.(*openapi3.Schema)
 		}
 	}
+	schema.Value.AllOf = na
+	return nil
 }
 
-func (t *fixAllOf) promoteReadOnly(parent string, schema *openapi3.SchemaRef) {
-	for _, ro := range t.IgnoreReadOnly {
-		if parent == ro {
-			na := []*openapi3.SchemaRef{}
-			for _, s := range schema.Value.AllOf {
-				if len(s.Value.Type) == 0 && s.Value.ReadOnly {
-					continue
-				}
-				na = append(na, s)
-			}
-			schema.Value.AllOf = na
-		}
-	}
-}
-
-func (t *fixAllOf) visitor(path []string, parent, node any) bool {
+func (t *allOfTransformer) visitor(path []string, parent, node any) (bool, error) {
 	schema, ok := node.(*openapi3.SchemaRef)
 	if !ok {
-		return true
+		return true, nil
 	}
-
 	if len(schema.Value.AllOf) == 0 {
-		return true
+		return true, nil
 	}
-	p, ok := parent.(string)
-	if !ok {
-		return true
+	if !containsNonType(schema.Value.AllOf) {
+		return true, nil
 	}
-	t.handleReadOnly(t.IgnoreReadOnly, p, schema, false)
-	t.handleReadOnly(t.PromoteReadOnly, p, schema, true)
-	t.mergeProperties(p, schema)
-	return true
-}
-
-func (t *fixAllOf) TransformV3(doc *openapi3.T) (*openapi3.T, error) {
-	walker := openapi.NewWalker(t.visitor)
-	walker.Walk(doc)
-	return doc, nil
+	for _, r := range t.AllOfRules {
+		if !match(path, r.Path) {
+			continue
+		}
+		if err := t.handleTransformation(r, schema); err != nil {
+			return false, fmt.Errorf("%v: %v", strings.Join(path, ":"), err)
+		}
+	}
+	return true, nil
 }

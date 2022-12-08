@@ -13,20 +13,21 @@ import (
 
 // Config represents the loaded transformer configuration.
 type Config struct {
-	Transforms []yaml.Node `yaml:"transforms"`
-	Names      []string
+	Configs    []yaml.Node `yaml:"configs"`
+	Transforms []string
 }
 
-func (c Config) Configure(t T) error {
-	if t == nil {
-		return fmt.Errorf("transformer not specified")
-	}
-	for i, n := range c.Names {
-		if n == t.Name() {
-			return t.Configure(c.Transforms[i])
+func (c Config) ConfigureAll() error {
+	for i, name := range c.Transforms {
+		tfr, ok := installed[name]
+		if !ok {
+			return fmt.Errorf("transformer %v not installed", name)
+		}
+		if err := tfr.Configure(c.Configs[i]); err != nil {
+			return err
 		}
 	}
-	return fmt.Errorf("transformer is not configured: %v", t.Name())
+	return nil
 }
 
 // LoadConfigFile loads the transform configuration from the
@@ -46,21 +47,17 @@ func ParseConfig(data []byte) (Config, error) {
 	if err := yaml.Unmarshal(data, &cfg); err != nil {
 		return Config{}, err
 	}
-	cfg.Names = make([]string, len(cfg.Transforms))
-	for i, c := range cfg.Transforms {
-		n, err := nameFromNode(c)
-		if err != nil {
+	cfg.Transforms = make([]string, len(cfg.Configs))
+	for i, c := range cfg.Configs {
+		var tmp map[string]yaml.Node
+		if err := c.Decode(&tmp); err != nil {
 			return Config{}, err
 		}
-		cfg.Names[i] = n
+		for name, config := range tmp {
+			cfg.Configs[i] = config
+			cfg.Transforms[i] = name
+			break
+		}
 	}
 	return cfg, nil
-}
-
-func nameFromNode(node yaml.Node) (string, error) {
-	tmp := struct {
-		Name string
-	}{}
-	err := node.Decode(&tmp)
-	return tmp.Name, err
 }

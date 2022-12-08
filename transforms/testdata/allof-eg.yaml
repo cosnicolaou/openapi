@@ -3,11 +3,28 @@ components:
   schemas:
     API:
       properties:
-        readonlyEg:
+        ignoreEg:
           type: object
           allOf:
             - type: object
             - readOnly: true
+    API2:
+      properties:
+        promoteEg:
+          type: object
+          allOf:
+            - type: object
+            - readOnly: true
+            - description: something
+    API3:
+      properties:
+        promoteEg:
+          type: object
+          allOf:
+            - type: object
+            - properties:
+                egURL:
+                  description: a URL
     Base:
       properties:
         apiURL:
@@ -18,9 +35,11 @@ components:
           type: string
           example: some text
     MergeEg:
-      allOf:
-        - $ref: "#/components/schemas/Base"
-        - properties:
-            apiURL:
-              example: http://a-different-example
-              type: string
+      properties:
+        API:
+          type: object
+          allOf:
+            - type: object
+            - properties:
+                egURL:
+                  description: "describe the previous type"
