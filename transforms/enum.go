@@ -41,7 +41,7 @@ func (t *fixEnums) Configure(node yaml.Node) error {
 func (t *fixEnums) Describe(node yaml.Node) string {
 	out := &strings.Builder{}
 	fmt.Fprintf(out, linewrap.Block(0, 80, `
-The enums transform handles various cases where enums are incorrectly specified`))
+The enums transform `))
 	tmp := &fixEnums{}
 	node.Decode(tmp)
 	out.WriteString("\noptions:\n")
@@ -54,12 +54,16 @@ func (t *fixEnums) TransformV2(doc *openapi2.T) (*openapi2.T, error) {
 }
 
 func (t *fixEnums) TransformV3(doc *openapi3.T) (*openapi3.T, error) {
-	walker := openapi.NewSchemaWalker(t.visitor)
+	walker := openapi.NewWalker(t.visitor)
 	walker.Walk(doc)
 	return doc, nil
 }
 
-func (t *fixEnums) visitor(parent any, sr *openapi3.SchemaRef) {
+func (t *fixEnums) visitor(path []string, parent, node any) bool {
+	sr, ok := node.(*openapi3.SchemaRef)
+	if !ok {
+		return true
+	}
 	v := sr.Value
 	if len(v.Enum) == 1 && len(t.FlattenSingleEnum) > 0 {
 		ev := v.Enum[0]
@@ -73,8 +77,9 @@ func (t *fixEnums) visitor(parent any, sr *openapi3.SchemaRef) {
 				v.Type = rw.Type
 				v.Format = rw.Format
 				v.Example = rw.Example
-				return
+				return true
 			}
 		}
 	}
+	return true
 }

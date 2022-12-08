@@ -27,6 +27,7 @@ type merge struct {
 
 type fixAllOf struct {
 	IgnoreReadOnly  []string `yaml:"ignoreReadOnly"`
+	PromoteReadOnly []string `yaml:"promoteReadOnly"`
 	MergeProperties []string `yaml:"mergeProperties"`
 }
 
@@ -97,7 +98,27 @@ func (t *fixAllOf) mergeProperties(parent string, schema *openapi3.SchemaRef) {
 	}
 }
 
-func (t *fixAllOf) ignoreReadOnly(parent string, schema *openapi3.SchemaRef) {
+func (t *fixAllOf) handleReadOnly(readonly []string, parent string, schema *openapi3.SchemaRef, promote bool) {
+	for _, ro := range readonly {
+		if parent == ro {
+			na := []*openapi3.SchemaRef{}
+			for _, s := range schema.Value.AllOf {
+				if len(s.Value.Type) == 0 && s.Value.ReadOnly {
+					if promote {
+						schema.Value.ReadOnly = s.Value.ReadOnly
+						schema.Value.Description = s.Value.Description
+						schema.Value.Example = s.Value.Example
+					}
+					continue
+				}
+				na = append(na, s)
+			}
+			schema.Value.AllOf = na
+		}
+	}
+}
+
+func (t *fixAllOf) promoteReadOnly(parent string, schema *openapi3.SchemaRef) {
 	for _, ro := range t.IgnoreReadOnly {
 		if parent == ro {
 			na := []*openapi3.SchemaRef{}
@@ -112,21 +133,27 @@ func (t *fixAllOf) ignoreReadOnly(parent string, schema *openapi3.SchemaRef) {
 	}
 }
 
-func (t *fixAllOf) visitor(parent any, schema *openapi3.SchemaRef) {
+func (t *fixAllOf) visitor(path []string, parent, node any) bool {
+	schema, ok := node.(*openapi3.SchemaRef)
+	if !ok {
+		return true
+	}
+
 	if len(schema.Value.AllOf) == 0 {
-		return
+		return true
 	}
 	p, ok := parent.(string)
 	if !ok {
-		return
+		return true
 	}
-	t.ignoreReadOnly(p, schema)
+	t.handleReadOnly(t.IgnoreReadOnly, p, schema, false)
+	t.handleReadOnly(t.PromoteReadOnly, p, schema, true)
 	t.mergeProperties(p, schema)
-	return
+	return true
 }
 
 func (t *fixAllOf) TransformV3(doc *openapi3.T) (*openapi3.T, error) {
-	walker := openapi.NewSchemaWalker(t.visitor)
+	walker := openapi.NewWalker(t.visitor)
 	walker.Walk(doc)
 	return doc, nil
 }

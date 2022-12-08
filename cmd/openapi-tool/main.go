@@ -19,7 +19,7 @@ commands:
     arguments:
       - url
   - name: format
-    summary: format an openapi spec, optionally converting to YAML if the schema was originally in json format.
+    summary: format an openapi spec, optionally inspecting to YAML if the schema was originally in json format.
     arguments:
       - filename
   - name: transform
@@ -32,6 +32,10 @@ commands:
       - filename
   - name: convert
     summary: convert an openapi v2 spec to v3.
+    arguments:
+      - filename
+  - name: inspect
+    summary: display the element at a path in the spec
     arguments:
       - filename
 `
@@ -50,6 +54,8 @@ func init() {
 		subcmd.MustRegisteredFlagSet(&struct{}{}))
 	cmdSet.Set("convert").RunnerAndFlags(convertCmd,
 		subcmd.MustRegisteredFlagSet(&ConvertFlags{}))
+	cmdSet.Set("inspect").RunnerAndFlags(inspectCmd,
+		subcmd.MustRegisteredFlagSet(&InspectFlags{}))
 }
 
 func main() {

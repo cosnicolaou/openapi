@@ -30,6 +30,8 @@ func TestAllOf(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	// ignore & promote readonly
+	// merge properties - which is possibly not needed.
 	txt := asYAML(t, doc)
 	contains(t, txt, `type: object
 properties:

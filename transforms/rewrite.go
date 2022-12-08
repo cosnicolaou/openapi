@@ -79,7 +79,7 @@ func (t *rewrites) TransformV2(doc *openapi2.T) (*openapi2.T, error) {
 }
 
 func (t *rewrites) TransformV3(doc *openapi3.T) (*openapi3.T, error) {
-	walker := openapi.NewSchemaWalker(t.visitor)
+	walker := openapi.NewWalker(t.visitor)
 	walker.Walk(doc)
 	return doc, nil
 }
@@ -131,7 +131,11 @@ func (t *rewrites) matchProperties(rw rewrite, props []any) bool {
 	return true
 }
 
-func (t *rewrites) visitor(parent any, sr *openapi3.SchemaRef) {
+func (t *rewrites) visitor(path []string, parent, node any) bool {
+	sr, ok := node.(*openapi3.SchemaRef)
+	if !ok {
+		return true
+	}
 	v := sr.Value
 
 	properties := jsonSlice(parent)
@@ -168,6 +172,7 @@ func (t *rewrites) visitor(parent any, sr *openapi3.SchemaRef) {
 		}
 		sr.Value = &nsv
 	}
+	return true
 
 }
 

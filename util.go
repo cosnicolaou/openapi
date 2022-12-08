@@ -13,6 +13,8 @@ import (
 )
 
 func FormatV3(doc *openapi3.T, isYAML bool) ([]byte, error) {
+	// roundtrip to/from json to ensure corner cases are handled
+	// correctly. See: http://web.archive.org/web/20190603050330/http://ghodss.com/2014/the-right-way-to-handle-yaml-in-golang/
 	data, err := doc.MarshalJSON()
 	if !isYAML {
 		return data, err
@@ -26,4 +28,17 @@ func FormatV3(doc *openapi3.T, isYAML bool) ([]byte, error) {
 	enc.SetIndent(2)
 	err = enc.Encode(tmp)
 	return out.Bytes(), err
+}
+
+func AsYAML(indent int, doc any) (string, error) {
+	data, err := json.Marshal(doc)
+	var tmp any
+	if err := json.Unmarshal(data, &tmp); err != nil {
+		return "", err
+	}
+	out := &bytes.Buffer{}
+	enc := yaml.NewEncoder(out)
+	enc.SetIndent(indent)
+	err = enc.Encode(tmp)
+	return out.String(), err
 }
