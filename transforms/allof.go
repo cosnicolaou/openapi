@@ -118,8 +118,6 @@ func (t *allOfTransformer) handleTransformation(r allOf, schema *openapi3.Schema
 		case r.IgnoreNonType:
 			continue
 		case len(r.MergeNonType) > 0:
-			fmt.Printf("merging....\n")
-
 			if prev == nil {
 				return fmt.Errorf("allOf entry: %v cannot be merged since there is previous schema with a type to merge it with", i)
 			}

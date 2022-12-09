@@ -72,18 +72,6 @@ func (t *rewriteTransformer) Transform(doc *openapi3.T) (*openapi3.T, error) {
 	return doc, walker.Walk(doc)
 }
 
-func match(a, b []string) bool {
-	if len(b) != len(a) {
-		return false
-	}
-	for i := range b {
-		if a[i] != b[i] {
-			return false
-		}
-	}
-	return true
-}
-
 func jsonMap(v any) map[string]any {
 	var r map[string]any
 	buf, _ := json.Marshal(v)
