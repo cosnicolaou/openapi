@@ -66,6 +66,9 @@ func (t *discriminatorTransformer) handleProperty(dr discriminatorRule, schema *
 			return
 		}
 	}
+	if schema.Properties == nil {
+		schema.Properties = openapi3.Schemas{}
+	}
 	schema.Properties[discName] = &openapi3.SchemaRef{
 		Value: &openapi3.Schema{
 			Type: "string",

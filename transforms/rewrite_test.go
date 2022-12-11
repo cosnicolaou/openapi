@@ -15,13 +15,18 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-func loadForTest(filename string, config string) (*openapi3.T, transforms.Config) {
+func loadYAML(filename string) *openapi3.T {
 	loader := openapi3.NewLoader()
 	loader.IsExternalRefsAllowed = true
 	doc, err := loader.LoadFromFile(filepath.Join("testdata", filename))
 	if err != nil {
 		panic(err)
 	}
+	return doc
+}
+
+func loadForTest(filename string, config string) (*openapi3.T, transforms.Config) {
+	doc := loadYAML(filename)
 	cfg, err := transforms.ParseConfig([]byte(config))
 	if err != nil {
 		panic(err)

@@ -85,19 +85,11 @@ func containsNonType(srefs openapi3.SchemaRefs) bool {
 	return false
 }
 
-func mergeProperties(base, overlay map[string]*openapi3.SchemaRef) {
-	for k, v := range overlay {
-		base[k] = v
-		fmt.Printf("m %v %v\n", k, v)
-	}
-}
-
 func handleMerge(a, b any, fields []string) (any, error) {
 	am, bm := jsonMap(a), jsonMap(b)
 	for _, field := range fields {
 		if v, ok := bm[field]; ok {
 			am[field] = v
-			fmt.Printf("M: %v\n", field)
 		}
 	}
 	c := a

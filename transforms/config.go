@@ -17,6 +17,7 @@ type Config struct {
 	Transforms []string
 }
 
+// ConfigureAll configures all of the transformers currently registered.
 func (c Config) ConfigureAll() error {
 	for i, name := range c.Transforms {
 		tfr, ok := installed[name]
