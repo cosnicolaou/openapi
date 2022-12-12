@@ -102,11 +102,13 @@ func (wn nodeWalker) visit(path []string, parent, node any) (ok bool, err error)
 }
 
 func (wn nodeWalker) Walk(doc *openapi3.T) error {
-	ok, err := wn.visit([]string{"info"}, doc, doc.Info)
-	if err != nil {
-		return err
+	if doc.Info != nil {
+		ok, err := wn.visit([]string{"info"}, doc, doc.Info)
+		if !ok || err != nil {
+			return err
+		}
 	}
-	ok, err = wn.components([]string{"components"}, doc, doc.Components)
+	ok, err := wn.components([]string{"components"}, doc, doc.Components)
 	if !ok || err != nil {
 		return err
 	}
