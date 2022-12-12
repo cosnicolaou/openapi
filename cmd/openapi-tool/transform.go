@@ -18,6 +18,7 @@ type TransformFlags struct {
 	OutputFlags
 	Config   string `subcmd:"config,transform.yaml,yaml configuration for the transformations to be applied"`
 	Describe bool   `subcmd:"describe,,describe all configured transformations"`
+	Validate bool   `subcmd:"validate,true,validate the transformed specification"`
 }
 
 func transformCmd(ctx context.Context, values any, args []string) error {
@@ -59,7 +60,7 @@ func transformCmd(ctx context.Context, values any, args []string) error {
 	if err != nil {
 		return err
 	}
-	return formatAndWriteV3(filename, doc, fv.OutputFlags, asYAML)
+	return formatAndWriteV3(ctx, filename, doc, fv.OutputFlags, asYAML, fv.Validate)
 }
 
 type applyFunc func(ctx context.Context, t transforms.T, node yaml.Node) error

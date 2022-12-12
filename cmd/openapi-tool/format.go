@@ -20,6 +20,7 @@ type OutputFlags struct {
 
 type FormatFlags struct {
 	OutputFlags
+	Validate bool `subcmd:"validate,true,validate the formatted specification"`
 }
 
 func formatCmd(ctx context.Context, values any, args []string) error {
@@ -37,13 +38,22 @@ func formatCmd(ctx context.Context, values any, args []string) error {
 	if err != nil {
 		return err
 	}
-	return formatAndWriteV3(filename, doc, fv.OutputFlags, asYAML)
+	return formatAndWriteV3(ctx, filename, doc, fv.OutputFlags, asYAML, fv.Validate)
 }
 
-func formatAndWriteV3(filename string, doc *openapi3.T, fv OutputFlags, isYAML bool) error {
+func formatAndWriteV3(ctx context.Context, filename string, doc *openapi3.T, fv OutputFlags, isYAML bool, validate bool) error {
 	data, err := openapi.FormatV3(doc, isYAML)
 	if err != nil {
 		return err
+	}
+	if validate {
+		fdoc, err := ParseV3(data)
+		if err != nil {
+			return err
+		}
+		if err := fdoc.Validate(ctx); err != nil {
+			return err
+		}
 	}
 	return writeFormatted(filename, data, fv)
 }

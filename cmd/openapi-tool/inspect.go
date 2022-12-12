@@ -13,6 +13,7 @@ type InspectFlags struct {
 	Path       string `subcmd:"path,,colon separated path of the component in the spec to inspect"`
 	FollowRegs bool   `subcmd:"follow-refs,false,set to true to follow/flatter schema references"`
 	Recurse    bool   `subcmd:"recurse,false,recurse into all sub-nodes of the requested path"`
+	TracePaths bool   `subcmd:"trace-paths,false,display each path in the spec as it is visited"`
 }
 
 func inspectCmd(ctx context.Context, values any, args []string) error {
@@ -28,7 +29,7 @@ func inspectCmd(ctx context.Context, values any, args []string) error {
 		recurse: fv.Recurse,
 	}
 
-	opts := []openapi.WalkerOption{}
+	opts := []openapi.WalkerOption{openapi.WalkerTracePaths(fv.TracePaths)}
 	if len(fv.Path) > 0 {
 		opts = append(opts, openapi.WalkerVisitPrefix(strings.Split(fv.Path, ":")...))
 	}

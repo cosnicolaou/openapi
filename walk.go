@@ -5,7 +5,9 @@
 package openapi
 
 import (
+	"fmt"
 	"strconv"
+	"strings"
 
 	"github.com/getkin/kin-openapi/openapi3"
 )
@@ -19,6 +21,7 @@ type walkerOptions struct {
 	followRefs    bool
 	visitPrefixes [][]string
 	applyPrefix   bool
+	trace         bool
 }
 
 // WalkerOption represents an option for use when creating a new walker.
@@ -38,6 +41,12 @@ func WalkerVisitPrefix(path ...string) WalkerOption {
 	return func(o *walkerOptions) {
 		o.visitPrefixes = append(o.visitPrefixes, path)
 		o.applyPrefix = true
+	}
+}
+
+func WalkerTracePaths(v bool) WalkerOption {
+	return func(o *walkerOptions) {
+		o.trace = v
 	}
 }
 
@@ -74,6 +83,9 @@ func prefixMatch(a, b []string) bool {
 }
 
 func (wn nodeWalker) visit(path []string, parent, node any) (ok bool, err error) {
+	if wn.opts.trace {
+		fmt.Println(strings.Join(path, ":"))
+	}
 	if wn.opts.applyPrefix {
 		match := false
 		for _, p := range wn.opts.visitPrefixes {
@@ -382,8 +394,8 @@ func (wn nodeWalker) parameters(path []string, parent any, pars *openapi3.Parame
 	if ok, err = wn.visit(path, parent, pars); !ok || err != nil {
 		return
 	}
-	for i, par := range *pars {
-		if ok, err = wn.parameterRef(append(path, strconv.Itoa(i)), parent, par); !ok || err != nil {
+	for _, par := range *pars {
+		if ok, err = wn.parameterRef(append(path, par.Value.Name), parent, par); !ok || err != nil {
 			return
 		}
 	}
