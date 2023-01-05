@@ -526,7 +526,10 @@ func (wn nodeWalker) headerRef(path []string, parent any, hdr *openapi3.HeaderRe
 	return wn.parameter(path, parent, &hdr.Value.Parameter)
 }
 
-func (wn nodeWalker) components(path []string, parent any, c openapi3.Components) (ok bool, err error) {
+func (wn nodeWalker) components(path []string, parent any, c *openapi3.Components) (ok bool, err error) {
+	if c == nil {
+		return true, nil
+	}
 	if ok, err = wn.visit(path, parent, c); !ok || err != nil {
 		return
 	}
@@ -702,13 +705,23 @@ func (wn nodeWalker) schemaRef(path []string, parent any, sref *openapi3.SchemaR
 	if ok, err = wn.schemaRef(append(path, "items"), sref, sref.Value.Items); !ok || err != nil {
 		return
 	}
-	if ok, err = wn.schemaRef(append(path, "additionalProperties"), sref, sref.Value.AdditionalProperties); !ok || err != nil {
+	if ok, err = wn.additionalProperties(append(path, "additionalProperties"), sref, sref.Value.AdditionalProperties); !ok || err != nil {
 		return
 	}
 	if ok, err = wn.extensions(append(path, "extensions"), sref, &sref.Value.Extensions); !ok || err != nil {
 		return
 	}
 	return wn.discriminator(append(path, "discriminator"), sref, sref.Value.Discriminator)
+}
+
+func (wn nodeWalker) additionalProperties(path []string, parent any, props openapi3.AdditionalProperties) (ok bool, err error) {
+	if props.Has == nil {
+		return true, nil
+	}
+	if ok, err = wn.visit(path, parent, props); !ok || err != nil {
+		return
+	}
+	return wn.schemaRef(path, props, props.Schema)
 }
 
 func (wn nodeWalker) extensions(path []string, parent any, exts *map[string]interface{}) (ok bool, err error) {
